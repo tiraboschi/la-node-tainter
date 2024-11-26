@@ -1,0 +1,75 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openshift-la-node-tainter
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: la-node-tainter
+  namespace: openshift-la-node-tainter
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: la-taint-nodes-role
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: ["route.openshift.io"]
+    resources: ["routes"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: la-node-tainter-node-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: la-taint-nodes-role
+subjects:
+  - kind: ServiceAccount
+    name: la-node-tainter
+    namespace: openshift-la-node-tainter
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: la-node-tainter-metrics-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-monitoring-view
+subjects:
+  - kind: ServiceAccount
+    name: la-node-tainter
+    namespace: openshift-la-node-tainter
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: la-node-tainter
+  namespace: openshift-la-node-tainter
+  labels:
+    type: la-node-tainter
+spec:
+  schedule: "*/2 * * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  startingDeadlineSeconds: 600
+  suspend: false
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: la-node-tainter
+              image: quay.io/tiraboschi/la-node-tainter:latest
+              imagePullPolicy: Always
+              tty: true
+          restartPolicy: OnFailure
+          serviceAccountName: la-node-tainter
