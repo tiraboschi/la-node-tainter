@@ -75,7 +75,7 @@ def main():
         node = m.get('metric').get('instance')
         if node in worker_nodes:
             worker_nodes[node]["cpu_pressure"] = float(m.get('value')[1]) * 100
-    print(f"worker nodes: {worker_nodes}")
+    print(f"worker nodes: {worker_nodes}"
 
 
 if __name__ == '__main__':
