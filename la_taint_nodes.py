@@ -21,6 +21,10 @@ class BearerAuth(requests.auth.AuthBase):
         return r
 
 
+def func(x):
+    return x + 1
+
+
 def main():
     try:
         config.load_incluster_config()

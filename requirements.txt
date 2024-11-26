@@ -1,0 +1,4 @@
+kubernetes
+prometheus_client
+openshift
+prometheus-api-client

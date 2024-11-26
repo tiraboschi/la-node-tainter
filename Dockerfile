@@ -14,5 +14,5 @@ RUN pip3 install openshift prometheus-api-client
 
 USER 1001
 
-COPY la-taint-nodes.py /
-ENTRYPOINT ["/la-taint-nodes.py"]
+COPY la_taint_nodes.py /
+ENTRYPOINT ["/la_taint_nodes.py"]
