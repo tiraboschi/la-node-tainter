@@ -1,9 +1,7 @@
 import pytest
-from la_taint_nodes import (
-    get_max_hard_taints,
-    get_max_soft_taints,
-    set_expected_taints
-)
+
+from la_taint_nodes import (get_max_hard_taints, get_max_soft_taints,
+                            set_expected_taints)
 
 
 @pytest.mark.parametrize(

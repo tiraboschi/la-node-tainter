@@ -1,12 +1,25 @@
 #!/usr/bin/python3
-from kubernetes import client, config
-from prometheus_api_client import PrometheusConnect
-from openshift.dynamic import DynamicClient
-from collections import OrderedDict
-
+import logging
 import math
 import os
+import sys
+from collections import OrderedDict
+
 import requests
+from kubernetes import client, config
+from openshift.dynamic import DynamicClient
+from prometheus_api_client import PrometheusConnect
+
+loglevel = os.environ.get('LOGLEVEL', 'INFO').upper()
+logger = logging.getLogger("la_taint_nodes")
+logger.setLevel(loglevel)
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(loglevel)
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 
 TAINT_KEY = "la-taint-psi-cpu"
@@ -58,6 +71,7 @@ def get_worker_nodes():
             for t in i.spec.taints:
                 if t.key == TAINT_KEY:
                     worker_nodes[i.metadata.name]["existing_taint"] = t
+    logger.debug(f"get_worker_nodes: {worker_nodes}")
     return worker_nodes
 
 
@@ -85,6 +99,7 @@ def get_metric_for_nodes(prometheus_url, token_content, worker_nodes):
         node = m.get('metric').get('instance')
         if node in worker_nodes:
             worker_nodes[node]["cpu_pressure"] = float(m.get('value')[1]) * 100
+    logger.debug(f"get_metric_for_nodes: {worker_nodes}")
     return worker_nodes
 
 
@@ -125,17 +140,17 @@ def set_expected_taints(worker_nodes_sorted):
 
 def apply_taint(node_name, proposed_taint):
     # TODO: implement me
-    print("apply")
+    logger.info("apply")
 
 
 def remove_taint(node_name, proposed_taint):
     # TODO: implement me
-    print("remove")
+    logger.info("remove")
 
 
 def update_taint(node_name, proposed_taint):
     # TODO: implement me
-    print("update")
+    logger.info("update")
 
 
 def compute_apply_patches(worker_nodes_sorted):
