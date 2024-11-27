@@ -1,4 +1,4 @@
 .idea/
 ca.crt
 token
-__pycache__/
+**/__pycache__/
