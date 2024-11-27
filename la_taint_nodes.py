@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+import json
 import logging
 import math
 import os
@@ -138,32 +139,48 @@ def set_expected_taints(worker_nodes_sorted):
             break
 
 
-def apply_taint(node_name, proposed_taint):
-    # TODO: implement me
-    logger.info("apply")
+def apply_taint(corev1, node_name, proposed_taint):
+    logger.info(
+        f"apply_taint node: {node_name}, proposed_taint: {proposed_taint}"
+    )
+    node = corev1.read_node(node_name)
+    if node.spec.taints is None:
+        patch = '[{"op": "add", "path": "/spec/taints", "value": []}}]'
+        jsonpatch = json.loads(patch)
+        ret = corev1.patch_node(name=node_name, body=jsonpatch)
+        logger.debug(f"apply_taint: ret={ret}")
+    patch = '[{"op": "add", "path": "/spec/taints/-", "value": %s}]' % str(
+        proposed_taint
+    ).replace('\'', '"')
+    logger.debug(f"apply_taint: patch={patch}")
+    jsonpatch = json.loads(patch)
+    logger.debug(f"apply_taint: jsonpatch={jsonpatch}")
+    ret = corev1.patch_node(name=node_name, body=jsonpatch)
+    logger.debug(f"apply_taint: ret={ret}")
 
 
-def remove_taint(node_name, proposed_taint):
+def remove_taint(corev1, node_name, proposed_taint):
     # TODO: implement me
     logger.info("remove")
 
 
-def update_taint(node_name, proposed_taint):
+def update_taint(corev1, node_name, proposed_taint):
     # TODO: implement me
     logger.info("update")
 
 
 def compute_apply_patches(worker_nodes_sorted):
+    corev1 = client.CoreV1Api()
     for node_name in worker_nodes_sorted:
         existing_taint = worker_nodes_sorted[node_name]['existing_taint']
         proposed_taint = worker_nodes_sorted[node_name]['proposed_taint']
         if existing_taint is None and proposed_taint is not None:
-            apply_taint(node_name, proposed_taint)
+            apply_taint(corev1, node_name, proposed_taint)
         elif existing_taint is not None and proposed_taint is None:
-            remove_taint(node_name, proposed_taint)
+            remove_taint(corev1, node_name, proposed_taint)
         elif (existing_taint is not None and proposed_taint is not None
-              and existing_taint['effect'] != proposed_taint['effect']):
-            update_taint(node_name, proposed_taint)
+              and existing_taint.effect != proposed_taint['effect']):
+            update_taint(corev1, node_name, proposed_taint)
 
 
 def main():
