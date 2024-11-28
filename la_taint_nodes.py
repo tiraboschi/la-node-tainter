@@ -1,10 +1,10 @@
 #!/usr/bin/python3
-import json
 import logging
 import math
 import os
 import sys
 from collections import OrderedDict
+from enum import Enum
 
 import requests
 from kubernetes import client, config
@@ -30,6 +30,12 @@ HARD_TAINT = 'NoSchedule'
 SOFT_TAINT = 'PreferNoSchedule'
 HARD_TAINT_THRESHOLD = 50.0
 SOFT_TAINT_THRESHOLD = 20.0
+
+
+class Operation(Enum):
+    ADD = 1
+    REMOVE = 2
+    REPLACE = 3
 
 
 class BearerAuth(requests.auth.AuthBase):
@@ -137,36 +143,49 @@ def set_expected_taints(worker_nodes_sorted):
                 break
         else:
             break
+    logger.debug(f"set_expected_taints: {worker_nodes_sorted}")
 
 
-def apply_taint(corev1, node_name, proposed_taint):
+def apply_taint(corev1, node_name, proposed_taint, operation):
     logger.info(
-        f"apply_taint node: {node_name}, proposed_taint: {proposed_taint}"
+        f"apply_taint node: {node_name}, "
+        f"proposed_taint: {proposed_taint}, "
+        f"operation: {operation}"
     )
     node = corev1.read_node(node_name)
-    if node.spec.taints is None:
-        patch = '[{"op": "add", "path": "/spec/taints", "value": []}}]'
-        jsonpatch = json.loads(patch)
-        ret = corev1.patch_node(name=node_name, body=jsonpatch)
-        logger.debug(f"apply_taint: ret={ret}")
-    patch = '[{"op": "add", "path": "/spec/taints/-", "value": %s}]' % str(
-        proposed_taint
-    ).replace('\'', '"')
-    logger.debug(f"apply_taint: patch={patch}")
-    jsonpatch = json.loads(patch)
-    logger.debug(f"apply_taint: jsonpatch={jsonpatch}")
-    ret = corev1.patch_node(name=node_name, body=jsonpatch)
-    logger.debug(f"apply_taint: ret={ret}")
 
-
-def remove_taint(corev1, node_name, proposed_taint):
-    # TODO: implement me
-    logger.info("remove")
-
-
-def update_taint(corev1, node_name, proposed_taint):
-    # TODO: implement me
-    logger.info("update")
+    body = {
+        "spec": {
+            "taints": node.spec.taints,
+        }
+    }
+    updated = False
+    if operation == Operation.ADD or operation == Operation.REPLACE:
+        if body['spec']['taints'] is not None:
+            for i, taint in enumerate(body['spec']['taints']):
+                if taint.key == TAINT_KEY:
+                    body['spec']['taints'][i].effect = proposed_taint['effect']
+                    body['spec']['taints'][i].value = proposed_taint['value']
+                    updated = True
+                    break
+        if not updated:
+            if body['spec']['taints'] is not None:
+                body['spec']['taints'].append(proposed_taint)
+            else:
+                body['spec']['taints'] = [proposed_taint]
+            updated = True
+    elif operation == Operation.REMOVE:
+        if body['spec']['taints'] is not None:
+            for i, taint in enumerate(body['spec']['taints']):
+                if taint.key == TAINT_KEY:
+                    del body['spec']['taints'][i]
+                    updated = True
+                    break
+    if updated:
+        res = corev1.patch_node(node_name, body)
+        logger.debug(
+            f"apply_taint res: {res}"
+        )
 
 
 def compute_apply_patches(worker_nodes_sorted):
@@ -175,12 +194,12 @@ def compute_apply_patches(worker_nodes_sorted):
         existing_taint = worker_nodes_sorted[node_name]['existing_taint']
         proposed_taint = worker_nodes_sorted[node_name]['proposed_taint']
         if existing_taint is None and proposed_taint is not None:
-            apply_taint(corev1, node_name, proposed_taint)
+            apply_taint(corev1, node_name, proposed_taint, Operation.ADD)
         elif existing_taint is not None and proposed_taint is None:
-            remove_taint(corev1, node_name, proposed_taint)
+            apply_taint(corev1, node_name, proposed_taint, Operation.REMOVE)
         elif (existing_taint is not None and proposed_taint is not None
               and existing_taint.effect != proposed_taint['effect']):
-            update_taint(corev1, node_name, proposed_taint)
+            apply_taint(corev1, node_name, proposed_taint, Operation.REPLACE)
 
 
 def main():
@@ -210,6 +229,15 @@ def main():
 
     worker_nodes_sorted = sort_nodes_by_metric(worker_nodes)
     set_expected_taints(worker_nodes_sorted)
+    for node_name in worker_nodes_sorted:
+        node = worker_nodes_sorted[node_name]
+        node_pt = worker_nodes_sorted[node_name]['proposed_taint']
+        logger.info(
+            f"node: {node_name}, "
+            f"metric: {node['cpu_pressure']}, "
+            f"proposed_taint: "
+            f"{node_pt['effect'] if node_pt is not None else None}"
+        )
     compute_apply_patches(worker_nodes_sorted)
 
 
